@@ -1,300 +1,400 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editor de Notas do Drive</title>
+    <title>Editor de Markdown</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Marcador de Markdown -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+    <!-- Google API Client Library -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #0d1117;
-            color: #c9d1d9;
+            margin: 0;
+            overflow: hidden; /* Evita a barra de rolagem geral da página */
         }
-        .container {
-            max-width: 90%;
+        .scrollable-container {
+            overflow-y: auto;
+            scrollbar-width: thin; /* Firefox */
+            scrollbar-color: #d1d5db #f3f4f6; /* cor do polegar da barra de rolagem e cor da faixa */
         }
-        .file-item {
-            cursor: pointer;
-            transition: background-color 0.2s ease;
+        .scrollable-container::-webkit-scrollbar {
+            width: 8px;
         }
-        .file-item:hover {
-            background-color: #161b22;
+        .scrollable-container::-webkit-scrollbar-track {
+            background: #f3f4f6;
         }
-        .file-item.active {
-            background-color: #1a2a44;
+        .scrollable-container::-webkit-scrollbar-thumb {
+            background-color: #d1d5db;
+            border-radius: 4px;
+            border: 2px solid #f3f4f6;
         }
         #editor {
-            height: 70vh;
-        }
-        .text-purple-400 {
-            color: #c9d1d9; /* Cor principal */
+            font-family: monospace;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-200">
+<body class="bg-gray-100 min-h-screen flex flex-col">
 
-<div class="container mx-auto p-8">
-    <h1 class="text-3xl font-bold mb-6 text-center text-purple-400">Editor de Notas do Drive</h1>
-    <p class="text-center text-gray-400 mb-8">Gerencie, edite e salve suas notas diretamente no Google Drive.</p>
-
-    <!-- Botões de Login/Logout -->
-    <div class="flex justify-center mb-8">
-        <button id="authorize_button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-200" style="display: none;">
-            Autorizar
-        </button>
-        <button id="signout_button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-200" style="display: none;">
-            Sair
-        </button>
-    </div>
-
-    <!-- Interface Principal -->
-    <div id="main-interface" style="display: none;" class="grid md:grid-cols-3 gap-6">
-
-        <!-- Coluna de Navegação de Arquivos -->
-        <div id="file-browser" class="md:col-span-1 bg-gray-800 p-4 rounded-lg shadow-lg">
-            <div class="flex justify-between items-center mb-2">
-                <h2 class="text-xl font-semibold text-purple-400">Arquivos e Pastas</h2>
-                <button id="back_button" class="text-gray-400 hover:text-white" style="display: none;">
-                    Voltar
-                </button>
-            </div>
-            <div id="loading_files" class="text-gray-400 text-center" style="display: none;">
-                Carregando arquivos...
-            </div>
-            <ul id="file-list-container"></ul>
+    <!-- Navbar -->
+    <header class="bg-white shadow-md p-4 flex justify-between items-center z-10">
+        <h1 class="text-2xl font-bold text-gray-800">Markdown Editor</h1>
+        <div id="auth-buttons" class="flex items-center space-x-2">
+            <span id="user-info" class="text-gray-600 hidden"></span>
+            <button id="authorize_button" class="bg-indigo-500 text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200">
+                Entrar com Google
+            </button>
+            <button id="signout_button" class="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 hidden">
+                Sair
+            </button>
         </div>
+    </header>
 
-        <!-- Coluna do Editor de Texto -->
-        <div id="editor-container" class="md:col-span-2 bg-gray-800 p-4 rounded-lg shadow-lg" style="display: none;">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold text-purple-400" id="file-name-display">Novo Arquivo</h2>
-                <button id="save_button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200">
+    <!-- Main App Container -->
+    <div class="flex-1 flex overflow-hidden">
+        <!-- Sidebar para a lista de arquivos -->
+        <aside id="sidebar" class="bg-gray-50 w-64 p-4 flex flex-col border-r border-gray-200 scrollable-container">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Meus Arquivos</h2>
+            <div id="file-list" class="flex-1 space-y-2">
+                <!-- Arquivos serão injetados aqui via JS -->
+                <div id="loading" class="text-gray-500 text-sm italic">
+                    Carregando arquivos...
+                </div>
+            </div>
+            <div class="mt-4 flex space-x-2">
+                <button id="new-file-button" class="bg-green-500 text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 w-1/2">
+                    Novo Arquivo
+                </button>
+                <button id="save-file-button" class="bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 w-1/2 hidden">
                     Salvar
                 </button>
             </div>
-            <textarea id="editor" class="w-full bg-gray-900 text-white p-4 rounded-lg border border-gray-700 focus:outline-none focus:border-blue-500 text-sm"></textarea>
-        </div>
+        </aside>
 
+        <!-- Painel principal com editor e pré-visualização -->
+        <main class="flex-1 p-4 flex flex-col lg:flex-row space-y-4 lg:space-y-0 lg:space-x-4">
+            <!-- Editor de texto -->
+            <div id="editor-container" class="bg-white rounded-lg shadow-md flex-1 overflow-hidden flex flex-col hidden">
+                <textarea id="editor" class="flex-1 w-full p-4 text-sm resize-none focus:outline-none scrollable-container border-b border-gray-200" placeholder="Comece a escrever em Markdown aqui..."></textarea>
+                <div class="bg-white p-2 border-t border-gray-200 flex items-center justify-between">
+                    <span class="text-sm text-gray-500">Editor</span>
+                </div>
+            </div>
+            
+            <!-- Pré-visualização do Markdown -->
+            <div id="preview-container" class="bg-white rounded-lg shadow-md flex-1 overflow-hidden flex flex-col hidden">
+                <div id="preview" class="p-4 flex-1 scrollable-container prose prose-sm max-w-none">
+                    <!-- A pré-visualização será renderizada aqui -->
+                </div>
+                <div class="bg-white p-2 border-t border-gray-200 flex items-center justify-between">
+                    <span class="text-sm text-gray-500">Pré-visualização</span>
+                </div>
+            </div>
+
+            <!-- Tela de boas-vindas -->
+            <div id="welcome-screen" class="flex-1 flex items-center justify-center p-8 bg-white rounded-lg shadow-md text-center">
+                <p class="text-gray-500 text-lg">
+                    Por favor, faça login para começar a gerenciar seus arquivos Markdown.
+                </p>
+            </div>
+        </main>
     </div>
 
-</div>
+    <!-- Scripts -->
+    <script>
+        // Use your own CLIENT_ID from Google Cloud Console
+        const CLIENT_ID = '716832953958-rj4vgkdk7ftn03lbrs4h2or9v2di16e6.apps.googleusercontent.com';
+        const API_KEY = 'AIzaSyDc7g27_P5QnUwBdsnsMTlmXG2Yr3IGfAM';
+        const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        const APP_FOLDER_NAME = 'Markdown Editor App';
 
-<script src="https://apis.google.com/js/api.js"></script>
-<script>
-    // Por favor, substitua pelos seus próprios valores
-    const API_KEY = 'AIzaSyDc7g27_P5QnUwBdsnsMTlmXG2Yr3IGfAM';
-    const CLIENT_ID = '716832953958-rj4vgkdk7ftn03lbrs4h2or9v2di16e6.apps.googleusercontent.com';
+        let gapiInited = false;
+        let gisInited = false;
+        let tokenClient;
+        let currentFile = null;
+        let appFolderId = null;
 
-    // Escopo alterado para permitir leitura, criação, edição e exclusão de arquivos criados pelo aplicativo
-    const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
-    const SCOPES = 'https://www.googleapis.com/auth/drive';
-    
-    // Elementos da UI
-    const authorizeButton = document.getElementById('authorize_button');
-    const signoutButton = document.getElementById('signout_button');
-    const mainInterface = document.getElementById('main-interface');
-    const fileListContainer = document.getElementById('file-list-container');
-    const editorContainer = document.getElementById('editor-container');
-    const fileBrowser = document.getElementById('file-browser');
-    const backButton = document.getElementById('back_button');
-    const loadingFiles = document.getElementById('loading_files');
-    const saveButton = document.getElementById('save_button');
-    const editor = document.getElementById('editor');
-    const fileNameDisplay = document.getElementById('file-name-display');
+        const authButton = document.getElementById('authorize_button');
+        const signoutButton = document.getElementById('signout_button');
+        const fileListContainer = document.getElementById('file-list');
+        const editorContainer = document.getElementById('editor-container');
+        const previewContainer = document.getElementById('preview-container');
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        const saveButton = document.getElementById('save-file-button');
+        const newFileButton = document.getElementById('new-file-button');
+        const userInfo = document.getElementById('user-info');
+        const loadingSpinner = document.getElementById('loading');
 
-    let tokenClient;
-    let gapiInited = false;
-    let gisInited = false;
-    let currentFolderId = 'root';
-    let currentFileId = null;
-
-    function gapiLoaded() {
-        gapi.load('client', initializeGapiClient);
-    }
-
-    async function initializeGapiClient() {
-        await gapi.client.init({
-            apiKey: API_KEY,
-            discoveryDocs: DISCOVERY_DOCS,
-        });
-        gapiInited = true;
-        maybeEnableButtons();
-    }
-
-    function gisLoaded() {
-        tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CLIENT_ID,
-            scope: SCOPES,
-            callback: '', 
-        });
-        gisInited = true;
-        maybeEnableButtons();
-    }
-
-    function maybeEnableButtons() {
-        if (gapiInited && gisInited) {
-            authorizeButton.style.display = 'block';
+        // Carrega a biblioteca da API do Google.
+        function gapiLoad() {
+            gapi.load('client', intializeGapiClient);
         }
-    }
 
-    function handleAuthClick() {
-        tokenClient.callback = async (resp) => {
-            if (resp.error !== undefined) {
-                throw (resp);
+        // Carrega a biblioteca GIS (Google Identity Services).
+        function gisLoad() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: '', // O callback é definido no momento da chamada
+            });
+            gisInited = true;
+            maybeEnableAuthButton();
+        }
+
+        // Inicializa o cliente da API.
+        async function intializeGapiClient() {
+            await gapi.client.init({
+                apiKey: API_KEY,
+                discoveryDocs: DISCOVERY_DOCS,
+            });
+            gapiInited = true;
+            maybeEnableAuthButton();
+        }
+
+        // Habilita o botão de autenticação se as bibliotecas estiverem prontas.
+        function maybeEnableAuthButton() {
+            if (gapiInited && gisInited) {
+                authButton.style.display = 'block';
             }
-            updateAuthStatus(true);
-            listDriveFiles(currentFolderId);
-        };
-        tokenClient.requestAccessToken({prompt: 'consent'});
-    }
+        }
 
-    function handleSignoutClick() {
-        const token = gapi.client.getToken();
-        if (token !== null) {
-            google.accounts.oauth2.revoke(token.access_token, () => {
+        // Lida com o fluxo de autenticação.
+        function handleAuthClick() {
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) {
+                    throw (resp);
+                }
+                showAuthenticatedUI();
+                await listMarkdownFiles();
+            };
+
+            if (gapi.client.getToken() === null) {
+                // Solicita o consentimento do usuário.
+                tokenClient.requestAccessToken({prompt: 'consent'});
+            } else {
+                // Obtém o token sem solicitar consentimento novamente.
+                tokenClient.requestAccessToken({prompt: ''});
+            }
+        }
+
+        // Lida com o fluxo de logout.
+        function handleSignoutClick() {
+            const token = gapi.client.getToken();
+            if (token !== null) {
+                google.accounts.oauth2.revoke(token.access_token);
                 gapi.client.setToken('');
-                updateAuthStatus(false);
-                fileBrowser.style.display = 'block';
-                editorContainer.style.display = 'none';
-            });
-        }
-    }
-
-    function updateAuthStatus(isSignedIn) {
-        if (isSignedIn) {
-            authorizeButton.style.display = 'none';
-            signoutButton.style.display = 'block';
-            mainInterface.style.display = 'grid';
-        } else {
-            authorizeButton.style.display = 'block';
-            signoutButton.style.display = 'none';
-            mainInterface.style.display = 'none';
-        }
-    }
-
-    async function listDriveFiles(folderId) {
-        currentFolderId = folderId;
-        loadingFiles.style.display = 'block';
-        fileListContainer.innerHTML = '';
-        backButton.style.display = folderId === 'root' ? 'none' : 'block';
-
-        try {
-            const response = await gapi.client.drive.files.list({
-                'q': `'${folderId}' in parents and trashed=false`,
-                'pageSize': 100,
-                'fields': 'nextPageToken, files(id, name, mimeType, parents)',
-            });
-
-            loadingFiles.style.display = 'none';
-            const files = response.result.files;
-
-            if (!files || files.length === 0) {
-                fileListContainer.innerHTML = '<p class="text-gray-400">Nenhum arquivo ou pasta encontrado.</p>';
-                return;
+                showSignedOutUI();
             }
-
-            files.forEach((file) => {
-                const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
-                const icon = isFolder ? '📁' : '📄';
-                const listItem = document.createElement('li');
-                listItem.className = 'file-item p-3 border-b border-gray-700 flex items-center rounded-md';
-                listItem.innerHTML = `<span class="mr-2">${icon}</span><span>${file.name}</span>`;
-                listItem.dataset.fileId = file.id;
-                listItem.dataset.mimeType = file.mimeType;
-                listItem.dataset.name = file.name;
-
-                listItem.addEventListener('click', () => handleFileClick(file.id, file.mimeType, file.name));
-                fileListContainer.appendChild(listItem);
-            });
-
-        } catch (err) {
-            loadingFiles.style.display = 'none';
-            console.error('Erro ao listar arquivos:', err);
-            fileListContainer.innerHTML = `<p class="text-red-400">Ocorreu um erro: ${err.result.error.message}</p>`;
         }
-    }
+        
+        // Exibe a interface do usuário quando o usuário está autenticado.
+        function showAuthenticatedUI() {
+            authButton.style.display = 'none';
+            signoutButton.style.display = 'block';
+            welcomeScreen.style.display = 'none';
+            editorContainer.style.display = 'flex';
+            previewContainer.style.display = 'flex';
+            const user = gapi.auth2.getAuthInstance().currentUser.get().getBasicProfile();
+            userInfo.textContent = `Olá, ${user.getName()}`;
+            userInfo.style.display = 'inline';
+        }
 
-    async function handleFileClick(fileId, mimeType, fileName) {
-        if (mimeType === 'application/vnd.google-apps.folder') {
-            listDriveFiles(fileId);
-        } else {
-            fileBrowser.style.display = 'none';
-            editorContainer.style.display = 'block';
-            fileNameDisplay.textContent = fileName;
-            currentFileId = fileId;
-            loadingFiles.style.display = 'block';
+        // Exibe a interface do usuário quando o usuário está desconectado.
+        function showSignedOutUI() {
+            authButton.style.display = 'block';
+            signoutButton.style.display = 'none';
+            welcomeScreen.style.display = 'flex';
+            editorContainer.style.display = 'none';
+            previewContainer.style.display = 'none';
+            userInfo.style.display = 'none';
+            saveButton.style.display = 'none';
+            currentFile = null;
+        }
 
+        // Busca o ID da pasta do aplicativo ou cria uma se ela não existir.
+        async function getAppFolderId() {
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: `mimeType='application/vnd.google-apps.folder' and name='${APP_FOLDER_NAME}' and trashed=false`,
+                    spaces: 'drive',
+                    fields: 'files(id, name)',
+                });
+                const folder = response.result.files[0];
+                if (folder) {
+                    return folder.id;
+                } else {
+                    const newFolder = await gapi.client.drive.files.create({
+                        resource: {
+                            name: APP_FOLDER_NAME,
+                            mimeType: 'application/vnd.google-apps.folder',
+                        },
+                        fields: 'id',
+                    });
+                    return newFolder.result.id;
+                }
+            } catch (error) {
+                console.error('Erro ao obter ou criar a pasta do aplicativo:', error);
+                alert('Erro ao carregar a pasta do aplicativo. Por favor, tente novamente.');
+                return null;
+            }
+        }
+
+        // Lista os arquivos Markdown na pasta do aplicativo.
+        async function listMarkdownFiles() {
+            fileListContainer.innerHTML = '';
+            loadingSpinner.style.display = 'block';
+            try {
+                if (!appFolderId) {
+                    appFolderId = await getAppFolderId();
+                    if (!appFolderId) {
+                        return;
+                    }
+                }
+                
+                const response = await gapi.client.drive.files.list({
+                    q: `'${appFolderId}' in parents and mimeType='text/markdown' and trashed=false`,
+                    spaces: 'drive',
+                    fields: 'files(id, name)',
+                });
+
+                if (response.result.files.length === 0) {
+                    fileListContainer.innerHTML = '<p class="text-gray-500 text-sm">Nenhum arquivo encontrado.</p>';
+                } else {
+                    response.result.files.forEach(file => {
+                        const fileElement = document.createElement('div');
+                        fileElement.classList.add('p-2', 'bg-white', 'rounded-lg', 'shadow-sm', 'cursor-pointer', 'hover:bg-gray-100', 'transition-colors', 'duration-150');
+                        fileElement.textContent = file.name;
+                        fileElement.dataset.fileId = file.id;
+                        fileElement.addEventListener('click', () => {
+                            loadFile(file.id);
+                        });
+                        fileListContainer.appendChild(fileElement);
+                    });
+                }
+            } catch (error) {
+                console.error('Erro ao listar arquivos:', error);
+                alert('Erro ao listar arquivos do Google Drive.');
+            } finally {
+                loadingSpinner.style.display = 'none';
+            }
+        }
+
+        // Carrega o conteúdo de um arquivo do Google Drive.
+        async function loadFile(fileId) {
             try {
                 const response = await gapi.client.drive.files.get({
                     fileId: fileId,
-                    alt: 'media'
+                    alt: 'media',
                 });
                 editor.value = response.body;
-                loadingFiles.style.display = 'none';
-            } catch (err) {
-                loadingFiles.style.display = 'none';
-                console.error('Erro ao carregar arquivo:', err);
+                updatePreview();
+                currentFile = fileId;
+                saveButton.style.display = 'block';
+                editor.focus();
+            } catch (error) {
+                console.error('Erro ao carregar o arquivo:', error);
                 alert('Erro ao carregar o arquivo. Por favor, tente novamente.');
             }
         }
-    }
 
-    async function saveFile() {
-        if (!currentFileId) return;
-
-        try {
-            const content = editor.value;
-            const file = new Blob([content], {type: 'text/plain'});
-            const response = await gapi.client.request({
-                path: `/upload/drive/v3/files/${currentFileId}`,
-                method: 'PATCH',
-                params: {
-                    uploadType: 'media'
-                },
-                body: file
-            });
-            alert('Arquivo salvo com sucesso!');
-        } catch (err) {
-            console.error('Erro ao salvar arquivo:', err);
-            alert('Erro ao salvar o arquivo. Por favor, tente novamente.');
-        }
-    }
-
-    async function navigateBack() {
-        if (currentFolderId === 'root') return;
-
-        try {
-            const response = await gapi.client.drive.files.get({
-                fileId: currentFolderId,
-                fields: 'parents'
-            });
-            const parentId = response.result.parents && response.result.parents[0];
-            if (parentId) {
-                listDriveFiles(parentId);
-            } else {
-                listDriveFiles('root');
+        // Salva as alterações no arquivo atual.
+        async function saveFile() {
+            if (!currentFile) {
+                alert('Nenhum arquivo selecionado para salvar.');
+                return;
             }
-        } catch (err) {
-            console.error('Erro ao voltar:', err);
-            listDriveFiles('root');
+
+            const content = editor.value;
+            const file = new Blob([content], {type: 'text/markdown'});
+            
+            const metadata = {
+                'name': `documento-${Date.now()}.md`, // O nome é na verdade uma atualização, mas a API não requer isso
+            };
+
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
+            form.append('file', file);
+
+            try {
+                const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${currentFile}?uploadType=multipart&alt=json`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${gapi.client.getToken().access_token}`,
+                    },
+                    body: form,
+                });
+                const result = await response.json();
+                console.log('Arquivo salvo:', result);
+                alert('Arquivo salvo com sucesso!');
+            } catch (error) {
+                console.error('Erro ao salvar o arquivo:', error);
+                alert('Erro ao salvar o arquivo. Por favor, verifique a conexão e permissões.');
+            }
         }
-    }
 
-    // Event Listeners
-    authorizeButton.onclick = handleAuthClick;
-    signoutButton.onclick = handleSignoutClick;
-    saveButton.onclick = saveFile;
-    backButton.onclick = navigateBack;
+        // Cria um novo arquivo Markdown.
+        async function createNewFile() {
+            const newFileName = prompt("Digite o nome do novo arquivo (ex: meu-documento.md):");
+            if (!newFileName || !newFileName.endsWith('.md')) {
+                alert('Nome do arquivo inválido. Por favor, use a extensão .md');
+                return;
+            }
 
-    window.onload = function() {
-        gapiLoaded();
-        gisLoaded();
-    };
-</script>
+            const fileMetadata = {
+                'name': newFileName,
+                'mimeType': 'text/markdown',
+                'parents': [appFolderId],
+            };
+
+            const content = `# ${newFileName.replace('.md', '')}\n\nComece a escrever aqui...`;
+            const file = new Blob([content], {type: 'text/markdown'});
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(fileMetadata)], {type: 'application/json'}));
+            form.append('file', file);
+            
+            try {
+                const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&alt=json', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${gapi.client.getToken().access_token}`,
+                    },
+                    body: form,
+                });
+                const result = await response.json();
+                console.log('Novo arquivo criado:', result);
+                alert('Novo arquivo criado com sucesso!');
+                await listMarkdownFiles(); // Atualiza a lista
+                loadFile(result.id); // Abre o novo arquivo
+            } catch (error) {
+                console.error('Erro ao criar o novo arquivo:', error);
+                alert('Erro ao criar o novo arquivo. Por favor, verifique a conexão e permissões.');
+            }
+        }
+
+        // Renderiza a pré-visualização do Markdown.
+        function updatePreview() {
+            const markdownText = editor.value;
+            preview.innerHTML = marked.parse(markdownText);
+        }
+
+        // Event Listeners
+        window.onload = function() {
+            gapiLoad();
+            gisLoad();
+            authButton.addEventListener('click', handleAuthClick);
+            signoutButton.addEventListener('click', handleSignoutClick);
+            editor.addEventListener('input', updatePreview);
+            saveButton.addEventListener('click', saveFile);
+            newFileButton.addEventListener('click', createNewFile);
+        };
+    </script>
 </body>
 </html>
-
